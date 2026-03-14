@@ -214,7 +214,7 @@ sub slurp {
     local $/;
     my $data = <$fh>;
     close $fh;
-    chomp $data;
+    $data =~ s/\s+$//;
     return $data;
 }
 
