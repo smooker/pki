@@ -198,6 +198,13 @@ sub slurp {
     return $data;
 }
 
+sub _write_ext {
+    my ($file, $content) = @_;
+    open my $fh, '>', $file or die "Can't write $file: $!\n";
+    print $fh $content;
+    close $fh;
+}
+
 sub check_ca {
     die "PKI not initialized — run: pki.pl init\n"
         unless -f "$pki_dir/ca.crt" && -f "$subca_dir/cacert.pem";
@@ -213,7 +220,9 @@ sub gen_client {
     print "=== Generating client: $client ===\n";
     run("openssl genrsa -out $prefix.key $key_size");
     run("openssl req -new -key $prefix.key -out $prefix.csr -batch -subj '/CN=$client'");
-    run("openssl x509 -req -in $prefix.csr -CA $subca_dir/cacert.pem -CAkey $subca_dir/ca.key -CAcreateserial -out $prefix.crt -days $days_cert");
+    _write_ext("$prefix.ext", "nsCertType=client\nextendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n");
+    run("openssl x509 -req -in $prefix.csr -CA $subca_dir/cacert.pem -CAkey $subca_dir/ca.key -CAcreateserial -out $prefix.crt -days $days_cert -extfile $prefix.ext");
+    unlink("$prefix.ext");
     unlink("$prefix.csr");
 }
 
@@ -278,7 +287,9 @@ if ($cmd eq 'init') {
         print "=== Generating server cert ($cn) ===\n";
         run("openssl genrsa -out $subca_dir/server.key $key_size");
         run("openssl req -new -key $subca_dir/server.key -out $subca_dir/server.csr -batch -subj '/CN=$cn'");
-        run("openssl x509 -req -in $subca_dir/server.csr -CA $subca_dir/cacert.pem -CAkey $subca_dir/ca.key -CAcreateserial -out $subca_dir/server.crt -days $days_cert");
+        _write_ext("$subca_dir/server.ext", "nsCertType=server\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n");
+        run("openssl x509 -req -in $subca_dir/server.csr -CA $subca_dir/cacert.pem -CAkey $subca_dir/ca.key -CAcreateserial -out $subca_dir/server.crt -days $days_cert -extfile $subca_dir/server.ext");
+        unlink("$subca_dir/server.ext");
         unlink("$subca_dir/server.csr");
         print "Server cert: $subca_dir/server.crt\n";
     } else {
