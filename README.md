@@ -8,10 +8,12 @@ pki.pl subca <name>
 pki.pl server [CN]
 pki.pl add <name> [name..]
 pki.pl conf <name> [name..]
+pki.pl p12 <name> [name..]
 pki.pl dh
 pki.pl takey
 pki.pl list
 pki.pl revoke <name>
+pki.pl crl
 pki.pl status
 
 Options:
@@ -61,6 +63,11 @@ Add client certificates signed by current Sub-CA.
 Generate all-in-one `.ovpn` configs with embedded
 ca-chain, cert, key and tls-auth. Ready to copy to client.
 
+### p12 *name* [*name* ...]
+
+Generate PKCS12 bundles (`.p12`) containing client cert, key and
+ca-chain. Empty passphrase by default. For Windows/macOS/mobile clients.
+
 ### dh
 
 Generate Diffie-Hellman parameters.
@@ -76,12 +83,16 @@ with CN, notBefore and notAfter dates.
 
 ### revoke *name*
 
-Revoke client certificate — renames `.crt`/`.key` to `.revoked`,
-deletes `.ovpn` if exists.
+Revoke client certificate using openssl ca, rename `.crt`/`.key` to
+`.revoked`, delete `.ovpn`/`.p12`, regenerate CRL.
+
+### crl
+
+Regenerate CRL (`crl.pem`) from current revocation database.
 
 ### status
 
-Short status: active/revoked client count, server, DH, ta.key presence.
+Short status: active/revoked client count, server, DH, ta.key, CRL presence.
 
 ## File Layout
 
@@ -98,10 +109,14 @@ $RealBin/
     server.crt, server.key                Server certificate
     dh2048.pem                            Diffie-Hellman parameters
     ta.key                                TLS-Auth HMAC key
+    crl.pem                               Certificate Revocation List
+    index.txt                             Revocation database
+    ca.cnf                                Minimal openssl ca config
     pki.pl -> ../pki.pl                   Symlink to master script
     clients/
       <name>.crt, <name>.key              Client certificate + key
       <name>.ovpn                         All-in-one OpenVPN config
+      <name>.p12                          PKCS12 bundle
 ```
 
 ## Example
@@ -115,6 +130,7 @@ pki.pl add client1 client2 client3
 pki.pl dh
 pki.pl takey
 pki.pl conf client1 client2
+pki.pl p12 client3
 
 # Multiple Sub-CAs
 pki.pl subca mail
@@ -125,6 +141,7 @@ pki.pl --subca mail add postfix dovecot
 pki.pl list
 pki.pl status
 pki.pl revoke client2
+pki.pl crl
 ```
 
 ## Requirements

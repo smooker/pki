@@ -141,10 +141,12 @@ Usage:
   pki.pl server [CN]             — server cert
   pki.pl add <name> [name..]     — add client(s)
   pki.pl conf <name> [name..]    — generate .ovpn config (all-in-one)
+  pki.pl p12 <name> [name..]     — generate PKCS12 bundle (.p12)
   pki.pl dh                      — generate DH params
   pki.pl takey                   — generate TLS-Auth key
   pki.pl list                    — show all certificates
-  pki.pl revoke <name>           — revoke client certificate
+  pki.pl revoke <name>           — revoke client certificate + update CRL
+  pki.pl crl                     — regenerate CRL
   pki.pl status                  — short PKI status
 
   Options:
@@ -335,6 +337,23 @@ OVPN
         print "Generated: $out\n";
     }
 
+} elsif ($cmd eq 'p12') {
+    usage() unless @ARGV;
+    check_ca();
+
+    for my $client (@ARGV) {
+        my $crt_file = "$subca_dir/clients/$client.crt";
+        my $key_file = "$subca_dir/clients/$client.key";
+        die "Client $client not found (run: pki.pl add $client)\n"
+            unless -f $crt_file && -f $key_file;
+
+        my $out = "$subca_dir/clients/$client.p12";
+        print "=== Generating PKCS12: $client ===\n";
+        run("openssl pkcs12 -export -in $crt_file -inkey $key_file -certfile $subca_dir/ca-chain.pem -out $out -passout pass:");
+        chmod 0600, $out;
+        print "Generated: $out\n";
+    }
+
 } elsif ($cmd eq 'list') {
     check_ca();
     print "=== Root CA ===\n";
@@ -356,11 +375,51 @@ OVPN
         my $crt = "$subca_dir/clients/$client.crt";
         die "Client $client not found\n" unless -f $crt;
         print "=== Revoking $client ===\n";
+        # revoke via openssl ca index
+        my $index = "$subca_dir/index.txt";
+        unless (-f $index) {
+            open my $fh, '>', $index or die;
+            close $fh;
+        }
+        my $serial = "$subca_dir/serial";
+        unless (-f $serial) {
+            open my $fh, '>', $serial or die;
+            print $fh "01\n";
+            close $fh;
+        }
+
+        # create minimal openssl.cnf for ca operations
+        my $cnf = "$subca_dir/ca.cnf";
+        unless (-f $cnf) {
+            open my $fh, '>', $cnf or die;
+            print $fh "[ca]\ndefault_ca = CA_default\n\n";
+            print $fh "[CA_default]\n";
+            print $fh "database = $index\n";
+            print $fh "serial = $serial\n";
+            print $fh "certificate = $subca_dir/cacert.pem\n";
+            print $fh "private_key = $subca_dir/ca.key\n";
+            print $fh "default_md = sha256\n";
+            print $fh "default_crl_days = 3650\n";
+            close $fh;
+        }
+
+        run("openssl ca -config $cnf -revoke $crt -batch 2>/dev/null || true");
         rename $crt, "$crt.revoked";
         rename "$subca_dir/clients/$client.key", "$subca_dir/clients/$client.key.revoked";
         unlink "$subca_dir/clients/$client.ovpn" if -f "$subca_dir/clients/$client.ovpn";
-        print "Revoked: $client (files renamed to .revoked)\n";
+        unlink "$subca_dir/clients/$client.p12" if -f "$subca_dir/clients/$client.p12";
+
+        # regenerate CRL
+        run("openssl ca -config $cnf -gencrl -out $subca_dir/crl.pem -batch");
+        print "Revoked: $client. CRL updated: $subca_dir/crl.pem\n";
     }
+
+} elsif ($cmd eq 'crl') {
+    check_ca();
+    my $cnf = "$subca_dir/ca.cnf";
+    die "No ca.cnf — run revoke first or create manually\n" unless -f $cnf;
+    run("openssl ca -config $cnf -gencrl -out $subca_dir/crl.pem -batch");
+    print "CRL: $subca_dir/crl.pem\n";
 
 } elsif ($cmd eq 'status') {
     if (-f "$pki_dir/ca.crt") {
@@ -374,6 +433,7 @@ OVPN
             print "Server:   " . (-f "$subca_dir/server.crt" ? "yes" : "no") . "\n";
             print "DH:       " . (-f "$subca_dir/dh2048.pem" ? "yes" : "no") . "\n";
             print "ta.key:   " . (-f "$subca_dir/ta.key" ? "yes" : "no") . "\n";
+            print "CRL:      " . (-f "$subca_dir/crl.pem" ? "yes" : "no") . "\n";
         }
     } else {
         print "PKI: not initialized\n";
@@ -399,7 +459,9 @@ pki.pl — PKI Manager (pure openssl, no easy-rsa)
     pki.pl dh
     pki.pl takey
     pki.pl list
+    pki.pl p12 <name> [name..]
     pki.pl revoke <name>
+    pki.pl crl
     pki.pl status
 
     Options:
@@ -448,6 +510,11 @@ Add client certificates signed by current Sub-CA.
 Generate all-in-one C<.ovpn> configs with embedded
 ca-chain, cert, key and tls-auth. Ready to copy to client.
 
+=item B<p12> I<name> [I<name> ...]
+
+Generate PKCS12 bundles (C<.p12>) containing client cert, key and
+ca-chain. Empty passphrase by default. For Windows/macOS/mobile clients.
+
 =item B<dh>
 
 Generate Diffie-Hellman parameters.
@@ -463,8 +530,12 @@ with CN, notBefore and notAfter dates.
 
 =item B<revoke> I<name>
 
-Revoke client certificate — renames C<.crt>/C<.key> to C<.revoked>,
-deletes C<.ovpn> if exists.
+Revoke client certificate using openssl ca, rename C<.crt>/C<.key> to
+C<.revoked>, delete C<.ovpn>/C<.p12>, regenerate CRL.
+
+=item B<crl>
+
+Regenerate CRL (C<crl.pem>) from current revocation database.
 
 =item B<status>
 
@@ -486,10 +557,14 @@ Short status: active/revoked client count, server, DH, ta.key presence.
         server.crt, server.key                Server certificate
         dh2048.pem                            Diffie-Hellman parameters
         ta.key                                TLS-Auth HMAC key
+        crl.pem                               Certificate Revocation List
+        index.txt                             Revocation database
+        ca.cnf                                Minimal openssl ca config
         pki.pl -> ../pki.pl                   Symlink to master script
         clients/
           <name>.crt, <name>.key              Client certificate + key
           <name>.ovpn                         All-in-one OpenVPN config
+          <name>.p12                          PKCS12 bundle
 
 =head1 EXAMPLE
 
