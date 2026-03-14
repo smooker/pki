@@ -340,8 +340,15 @@ if ($cmd eq 'init') {
     check_ca();
     unless (-f "$subca_dir/ta.key") {
         print "=== Generating TLS-Auth key ===\n";
-        # openssl-based HMAC key (no openvpn dependency)
-        run("openssl rand -out $subca_dir/ta.key 256");
+        # OpenVPN static key format (no openvpn dependency)
+        my $hex = `openssl rand -hex 256`;
+        chomp $hex;
+        open my $fh, '>', "$subca_dir/ta.key" or die "Can't write ta.key: $!\n";
+        print $fh "#\n# 2048 bit OpenVPN static key\n#\n";
+        print $fh "-----BEGIN OpenVPN Static key V1-----\n";
+        print $fh substr($hex, $_ * 32, 32) . "\n" for 0..15;
+        print $fh "-----END OpenVPN Static key V1-----\n";
+        close $fh;
         chmod 0600, "$subca_dir/ta.key";
     } else {
         print "ta.key already exists, skipping.\n";
