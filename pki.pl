@@ -20,11 +20,19 @@ use FindBin qw($RealBin);
 # PKI dir = wherever this script lives
 my $pki_dir   = $RealBin;
 my $subca_name = 'vpn';  # default
+my $server_ip = '127.0.0.1';
+my $server_port = 1194;
 
-# parse --subca option before command
-if (@ARGV && $ARGV[0] eq '--subca') {
-    shift @ARGV;
-    $subca_name = shift @ARGV || die "--subca requires a name\n";
+# parse options before command
+while (@ARGV && $ARGV[0] =~ /^--/) {
+    my $opt = shift @ARGV;
+    if ($opt eq '--subca') {
+        $subca_name = shift @ARGV || die "--subca requires a name\n";
+    } elsif ($opt eq '--remote') {
+        $server_ip = shift @ARGV || die "--remote requires IP or hostname\n";
+    } else {
+        die "Unknown option: $opt\n";
+    }
 }
 
 # sandbox: chroot to $pki_dir if running as root
@@ -53,8 +61,6 @@ my $key_size   = 2048;
 my $ca_key_size = 4096;
 
 my $server_cn = 'server';
-my $server_ip = '127.0.0.1';
-my $server_port = 1194;
 
 my @default_clients = ();
 
@@ -187,6 +193,7 @@ Usage:
 
   Options:
     --subca <name>                   — select Sub-CA (default: vpn)
+    --remote <ip>                    — server IP/hostname for .ovpn (default: 127.0.0.1)
 EOF
     exit 1;
 }
@@ -551,6 +558,7 @@ pki.pl — PKI Manager (pure openssl, no easy-rsa)
 
     Options:
       --subca <name>    select Sub-CA (default: vpn)
+      --remote <ip>     server IP/hostname for .ovpn (default: 127.0.0.1)
 
 =head1 DESCRIPTION
 
