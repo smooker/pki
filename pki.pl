@@ -308,17 +308,17 @@ if ($cmd eq 'init') {
     check_ca();
     my $cn = shift @ARGV || $server_cn;
 
-    unless (-f "$subca_dir/server.key") {
+    unless (-f "$subca_dir/$cn.key") {
         print "=== Generating server cert ($cn) ===\n";
-        run("openssl genrsa -out $subca_dir/server.key $key_size");
-        run("openssl req -config $pki_dir/.openssl.cnf -new -key $subca_dir/server.key -out $subca_dir/server.csr -batch -subj '/CN=$cn'");
-        _write_ext("$subca_dir/server.ext", "nsCertType=server\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n");
-        run("openssl x509 -req -in $subca_dir/server.csr -CA $subca_dir/cacert.pem -CAkey $subca_dir/ca.key -CAcreateserial -out $subca_dir/server.crt -days $days_cert -extfile $subca_dir/server.ext");
-        unlink("$subca_dir/server.ext");
-        unlink("$subca_dir/server.csr");
-        print "Server cert: $subca_dir/server.crt\n";
+        run("openssl genrsa -out $subca_dir/$cn.key $key_size");
+        run("openssl req -config $pki_dir/.openssl.cnf -new -key $subca_dir/$cn.key -out $subca_dir/$cn.csr -batch -subj '/CN=$cn'");
+        _write_ext("$subca_dir/$cn.ext", "nsCertType=server\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n");
+        run("openssl x509 -req -in $subca_dir/$cn.csr -CA $subca_dir/cacert.pem -CAkey $subca_dir/ca.key -CAcreateserial -out $subca_dir/$cn.crt -days $days_cert -extfile $subca_dir/$cn.ext");
+        unlink("$subca_dir/$cn.ext");
+        unlink("$subca_dir/$cn.csr");
+        print "Server cert: $subca_dir/$cn.crt\n";
     } else {
-        print "Server cert already exists, skipping.\n";
+        print "Server cert $cn already exists, skipping.\n";
     }
 
 } elsif ($cmd eq 'dh') {
@@ -452,7 +452,9 @@ OVPN
     print "\n=== Sub-CA ($subca_name) ===\n";
     run("openssl x509 -in $subca_dir/cacert.pem -noout -subject -dates");
     print "\n=== Server ===\n";
-    run("openssl x509 -in $subca_dir/server.crt -noout -subject -dates") if -f "$subca_dir/server.crt";
+    for my $f (sort grep { !/cacert\.pem$/ } glob("$subca_dir/*.crt")) {
+        run("openssl x509 -in $f -noout -subject -dates");
+    }
     print "\n=== Clients ===\n";
     for my $f (sort glob("$subca_dir/clients/*.crt")) {
         run("openssl x509 -in $f -noout -subject -dates");
@@ -521,7 +523,8 @@ OVPN
             my @revoked = glob("$subca_dir/clients/*.crt.revoked");
             print "Sub-CA:   $subca_dir/cacert.pem\n";
             print "Clients:  " . scalar(@crts) . " active, " . scalar(@revoked) . " revoked\n";
-            print "Server:   " . (-f "$subca_dir/server.crt" ? "yes" : "no") . "\n";
+            my @srv = grep { !/cacert\.pem$/ } glob("$subca_dir/*.crt");
+            print "Server:   " . (scalar(@srv) ? join(', ', map { s/.*\///; s/\.crt$//; $_ } @srv) : "no") . "\n";
             print "DH:       " . (-f "$subca_dir/dh2048.pem" ? "yes" : "no") . "\n";
             print "ta.key:   " . (-f "$subca_dir/ta.key" ? "yes" : "no") . "\n";
             print "CRL:      " . (-f "$subca_dir/crl.pem" ? "yes" : "no") . "\n";
@@ -654,7 +657,7 @@ Short status: active/revoked client count, server, DH, ta.key presence.
         ca.key                                Sub-CA private key
         cacert.pem                            Sub-CA certificate
         ca-chain.pem                          cacert.pem + ca.crt
-        server.crt, server.key                Server certificate
+        <CN>.crt, <CN>.key                    Server certificate (named by CN)
         dh2048.pem                            Diffie-Hellman parameters
         ta.key                                TLS-Auth HMAC key
         crl.pem                               Certificate Revocation List

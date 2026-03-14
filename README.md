@@ -115,7 +115,7 @@ $RealBin/
     ca.key                                Sub-CA private key
     cacert.pem                            Sub-CA certificate
     ca-chain.pem                          cacert.pem + ca.crt
-    server.crt, server.key                Server certificate
+    <CN>.crt, <CN>.key                    Server certificate (named by CN)
     dh2048.pem                            Diffie-Hellman parameters
     ta.key                                TLS-Auth HMAC key
     crl.pem                               Certificate Revocation List
