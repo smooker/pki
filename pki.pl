@@ -226,8 +226,14 @@ sub check_ca {
         unless -f "$pki_dir/ca.crt" && -f "$subca_dir/cacert.pem";
 }
 
+sub _fqcn {
+    my $name = shift;
+    $name = "$name.$subca_name" unless $name =~ /\.\Q$subca_name\E$/;
+    return $name;
+}
+
 sub gen_client {
-    my $client = shift;
+    my $client = _fqcn(shift);
     my $prefix = "$subca_dir/clients/$client";
     if (-f "$prefix.crt") {
         print "Client $client already exists, skipping.\n";
@@ -351,7 +357,7 @@ if ($cmd eq 'init') {
     usage() unless @ARGV;
     check_ca();
 
-    for my $client (@ARGV) {
+    for my $client (map { _fqcn($_) } @ARGV) {
         my $crt_file = "$subca_dir/clients/$client.crt";
         my $key_file = "$subca_dir/clients/$client.key";
         die "Client $client not found (run: pki.pl add $client)\n"
@@ -404,7 +410,7 @@ OVPN
     usage() unless @ARGV;
     check_ca();
 
-    for my $client (@ARGV) {
+    for my $client (map { _fqcn($_) } @ARGV) {
         my $crt_file = "$subca_dir/clients/$client.crt";
         my $key_file = "$subca_dir/clients/$client.key";
         die "Client $client not found (run: pki.pl add $client)\n"
@@ -421,7 +427,7 @@ OVPN
     usage() unless @ARGV;
     check_ca();
 
-    for my $client (@ARGV) {
+    for my $client (map { _fqcn($_) } @ARGV) {
         my $crt_file = "$subca_dir/clients/$client.crt";
         die "Client $client not found (run: pki.pl add $client)\n"
             unless -f $crt_file;
@@ -464,7 +470,7 @@ OVPN
 } elsif ($cmd eq 'revoke') {
     usage() unless @ARGV;
     check_ca();
-    for my $client (@ARGV) {
+    for my $client (map { _fqcn($_) } @ARGV) {
         my $crt = "$subca_dir/clients/$client.crt";
         die "Client $client not found\n" unless -f $crt;
         print "=== Revoking $client ===\n";
