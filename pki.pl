@@ -233,7 +233,7 @@ if ($cmd eq 'init') {
     make_path($pki_dir);
 
     # --- Root CA ---
-    unless (-f "$pki_dir/ca.key") {
+    unless (-f "$pki_dir/ca.key" && -f "$pki_dir/ca.crt") {
         print "=== Generating Root CA ===\n";
         run("openssl genrsa -out $pki_dir/ca.key $ca_key_size");
         run("openssl req -config /dev/null -new -x509 -key $pki_dir/ca.key -out $pki_dir/ca.crt -days $days_ca -batch -subj '/CN=Root CA'");
@@ -253,7 +253,7 @@ if ($cmd eq 'init') {
     my $sdir = "$pki_dir/$name";
     make_path("$sdir/clients");
 
-    unless (-f "$sdir/ca.key") {
+    unless (-f "$sdir/ca.key" && -f "$sdir/cacert.pem") {
         print "=== Generating Sub-CA ($name) ===\n";
         run("openssl genrsa -out $sdir/ca.key $key_size");
         run("openssl req -config /dev/null -new -key $sdir/ca.key -out $sdir/ca.csr -batch -subj '/CN=$name CA'");
