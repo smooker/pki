@@ -1,5 +1,7 @@
 #!/usr/bin/perl
 # pki.pl — PKI Manager (чист openssl, без easy-rsa)
+# Copyright (c) 2026 smooker <smooker@smooker.org>
+# License: GPL-3.0 (see LICENSE)
 # Йерархия: Root CA (smooker.org) → Sub-CA (vpn.smooker.org/) → certs
 #
 # Структура:
