@@ -182,6 +182,7 @@ Usage:
   pki.pl server [CN]             — server cert
   pki.pl add <name> [name..]     — add client(s)
   pki.pl conf <name> [name..]    — generate .ovpn config (all-in-one)
+  pki.pl show_conf server|<name> — print OpenVPN config to stdout
   pki.pl p12 <name> [name..]     — generate PKCS12 bundle (.p12)
   pki.pl card <name> [name..]    — generate compact card blob for Mifare
   pki.pl dh                      — generate DH params
@@ -411,6 +412,96 @@ OVPN
         close $fh;
         chmod 0600, $out;
         print "Generated: $out\n";
+    }
+
+} elsif ($cmd eq 'show_conf') {
+    my $type = shift @ARGV || die "Usage: pki.pl show_conf server|<client>\n";
+    check_ca();
+
+    if ($type eq 'server') {
+        # find server cert
+        my @srv = grep { !/cacert\.pem$/ } glob("$subca_dir/*.crt");
+        die "No server cert found\n" unless @srv;
+        my ($cn) = ($srv[0] =~ m{/([^/]+)\.crt$});
+        my $ca_chain = slurp("$subca_dir/ca-chain.pem");
+        my $crt      = slurp($srv[0]);
+        my $key      = slurp("$subca_dir/$cn.key");
+        my $ta       = -f "$subca_dir/ta.key" ? slurp("$subca_dir/ta.key") : '';
+        print <<"CONF";
+port $server_port
+proto udp
+dev tap
+
+ca [inline]
+cert [inline]
+key [inline]
+dh $subca_dir/dh2048.pem
+tls-auth [inline] 0
+
+server 10.10.0.0 255.255.255.0
+
+keepalive 10 120
+cipher AES-256-GCM
+persist-key
+persist-tun
+status openvpn-status.log
+verb 3
+client-to-client
+
+<ca>
+$ca_chain
+</ca>
+
+<cert>
+$crt
+</cert>
+
+<key>
+$key
+</key>
+
+<tls-auth>
+$ta
+</tls-auth>
+CONF
+    } else {
+        my $client = _fqcn($type);
+        my $crt_file = "$subca_dir/clients/$client.crt";
+        my $key_file = "$subca_dir/clients/$client.key";
+        die "Client $client not found\n" unless -f $crt_file && -f $key_file;
+        my $ca_chain = slurp("$subca_dir/ca-chain.pem");
+        my $crt      = slurp($crt_file);
+        my $key      = slurp($key_file);
+        my $ta       = -f "$subca_dir/ta.key" ? slurp("$subca_dir/ta.key") : '';
+        print <<"CONF";
+client
+dev tap
+proto udp
+remote $server_ip $server_port
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+cipher AES-256-GCM
+verb 3
+key-direction 1
+
+<ca>
+$ca_chain
+</ca>
+
+<cert>
+$crt
+</cert>
+
+<key>
+$key
+</key>
+
+<tls-auth>
+$ta
+</tls-auth>
+CONF
     }
 
 } elsif ($cmd eq 'p12') {
