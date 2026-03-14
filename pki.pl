@@ -245,7 +245,7 @@ if ($cmd eq 'init') {
     unless (-f "$pki_dir/ca.key" && -f "$pki_dir/ca.crt") {
         print "=== Generating Root CA ===\n";
         run("openssl genrsa -out $pki_dir/ca.key $ca_key_size");
-        run("openssl req -config $pki_dir/.openssl.cnf -new -x509 -key $pki_dir/ca.key -out $pki_dir/ca.crt -days $days_ca -batch -subj '/CN=Root CA'");
+        run("openssl req -config $pki_dir/.openssl.cnf -new -x509 -key $pki_dir/ca.key -out $pki_dir/ca.crt -days $days_ca -batch -subj '/CN=Root CA' -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=keyCertSign,cRLSign'");
         chmod 0400, "$pki_dir/ca.key";
         print "\n=== Root CA created ===\n";
         print "Root CA: $pki_dir/ca.crt\n";
