@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 # pki.pl — PKI Manager (чист openssl, без easy-rsa)
-# Copyright (c) 2026 smooker <smooker@smooker.org>
+# Copyright (c) 2026 smooker <sc@smooker.org>
 # License: GPL-3.0 (see LICENSE)
 # Йерархия: Root CA (smooker.org) → Sub-CA (vpn.smooker.org/) → certs
 #
@@ -385,6 +385,6 @@ ca-chain, cert, key и tls-auth. Готови за копиране на кли�
 
 =head1 AUTHOR
 
-smooker E<lt>smooker@smooker.orgE<gt>, Claude
+smooker E<lt>sc@smooker.orgE<gt>, Claude
 
 =cut
