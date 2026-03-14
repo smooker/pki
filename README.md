@@ -8,6 +8,7 @@ pki.pl subca <name>
 pki.pl server [CN]
 pki.pl add <name> [name..]
 pki.pl conf <name> [name..]
+pki.pl show_conf server|<name>
 pki.pl p12 <name> [name..]
 pki.pl card <name> [name..]
 pki.pl dh
@@ -56,10 +57,12 @@ in the sub-CA directory for convenience.
 ### server [*CN*]
 
 Generate server certificate signed by current Sub-CA.
+Certificate is named by CN (e.g. `srv.vpn.smooker.org.crt`).
 
 ### add *name* [*name* ...]
 
 Add client certificates signed by current Sub-CA.
+Client names are auto-expanded to FQCN (e.g. `st` becomes `st.vpn.smooker.org`).
 
 ### conf *name* [*name* ...]
 
@@ -77,6 +80,12 @@ Generate compact binary blob (48 bytes) for Mifare 4K smart cards.
 Contains SHA-256 of client certificate (32 bytes) + client name (16 bytes,
 null-padded). Intended for sector 2+ of Mifare 4K. Reader verifies
 hash against PKI database.
+
+### show_conf server|*name*
+
+Print OpenVPN config to stdout. `server` prints server config,
+client name prints client config. All components inline (ca, cert,
+key, dh, tls-auth). Use `--remote` and `--port` to set endpoint.
 
 ### dh
 
@@ -124,7 +133,7 @@ $RealBin/
     ca.cnf                                Minimal openssl ca config
     pki.pl -> ../pki.pl                   Symlink to master script
     clients/
-      <name>.crt, <name>.key              Client certificate + key
+      <name>.crt, <name>.key              Client cert + key (FQCN)
       <name>.ovpn                         All-in-one OpenVPN config
       <name>.p12                          PKCS12 bundle
       <name>.card                         Mifare card blob (48 bytes)
@@ -135,19 +144,25 @@ $RealBin/
 ```bash
 # Setup
 pki.pl init
-pki.pl subca vpn
-pki.pl server myserver.example.com
-pki.pl add client1 client2 client3
+pki.pl subca vpn.example.com
+pki.pl server srv.vpn.example.com
+pki.pl add client1 client2        # -> client1.vpn.example.com etc.
 pki.pl dh
 pki.pl takey
-pki.pl conf client1 client2
+
+# Generate client configs
+pki.pl --remote 1.2.3.4 --port 65432 conf client1 client2
 pki.pl p12 client3
 pki.pl card client1 client2 client3
 
+# Preview configs
+pki.pl --port 65432 show_conf server
+pki.pl --remote 1.2.3.4 --port 65432 show_conf client1
+
 # Multiple Sub-CAs
-pki.pl subca mail
-pki.pl --subca mail server mail.example.com
-pki.pl --subca mail add postfix dovecot
+pki.pl subca mail.example.com
+pki.pl --subca mail.example.com server srv.mail.example.com
+pki.pl --subca mail.example.com add postfix dovecot
 
 # Management
 pki.pl list

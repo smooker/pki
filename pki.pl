@@ -1,15 +1,15 @@
 #!/usr/bin/perl
-# pki.pl — PKI Manager (чист openssl, без easy-rsa)
+# pki.pl — PKI Manager (pure openssl, no easy-rsa)
 # Copyright (c) 2026 smooker <sc@smooker.org>
 # License: GPL-3.0 (see LICENSE)
-# Йерархия: Root CA → Sub-CA → certs
+# Hierarchy: Root CA -> Sub-CA -> server/client certs
 #
-# Структура:
+# Layout:
 #   $pki_dir/ca.key, ca.crt                        — Root CA
 #   $pki_dir/<subca>/cacert.pem, ca.key             — Sub-CA
 #   $pki_dir/<subca>/ca-chain.pem                   — chain (sub-ca + root)
-#   $pki_dir/<subca>/server.{crt,key}               — server
-#   $pki_dir/<subca>/clients/<name>.{crt,key}       — clients
+#   $pki_dir/<subca>/<CN>.{crt,key}                 — server (named by CN)
+#   $pki_dir/<subca>/clients/<name>.{crt,key,ovpn}  — clients (FQCN)
 #   $pki_dir/<subca>/dh2048.pem, ta.key             — DH + TLS-Auth
 
 use strict;
@@ -693,10 +693,12 @@ in the sub-CA directory for convenience.
 =item B<server> [I<CN>]
 
 Generate server certificate signed by current Sub-CA.
+Certificate is named by CN (e.g. C<srv.vpn.smooker.org.crt>).
 
 =item B<add> I<name> [I<name> ...]
 
 Add client certificates signed by current Sub-CA.
+Client names are auto-expanded to FQCN (e.g. C<st> becomes C<st.vpn.smooker.org>).
 
 =item B<conf> I<name> [I<name> ...]
 
@@ -714,6 +716,12 @@ Generate compact binary blob (48 bytes) for Mifare 4K smart cards.
 Contains SHA-256 of client certificate (32 bytes) + client name (16 bytes,
 null-padded). Intended for sector 2+ of Mifare 4K. Reader verifies
 hash against PKI database.
+
+=item B<show_conf> server|I<name>
+
+Print OpenVPN config to stdout. C<server> prints server config,
+client name prints client config. All components inline (ca, cert,
+key, dh, tls-auth). Use C<--remote> and C<--port> to set endpoint.
 
 =item B<dh>
 
