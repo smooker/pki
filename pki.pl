@@ -430,16 +430,11 @@ OVPN
         my $crt      = slurp($srv[0]);
         my $key      = slurp("$subca_dir/$cn.key");
         my $ta       = -f "$subca_dir/ta.key" ? slurp("$subca_dir/ta.key") : '';
+        my $dh       = -f "$subca_dir/dh2048.pem" ? slurp("$subca_dir/dh2048.pem") : '';
         print <<"CONF";
 port $server_port
 proto udp
 dev tap
-
-ca [inline]
-cert [inline]
-key [inline]
-dh $subca_dir/dh2048.pem
-tls-auth [inline] 0
 
 server 10.10.0.0 255.255.255.0
 
@@ -462,6 +457,10 @@ $crt
 <key>
 $key
 </key>
+
+<dh>
+$dh
+</dh>
 
 <tls-auth>
 $ta
