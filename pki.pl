@@ -275,7 +275,16 @@ if ($cmd eq 'init') {
         unlink("$sdir/ca.csr", "$sdir/ca.ext");
 
         # chain: sub-ca + root
-        run("cat $sdir/cacert.pem $pki_dir/ca.crt > $sdir/ca-chain.pem");
+        # build ca-chain.pem (pure perl, no cat in chroot)
+        {
+            open my $out, '>', "$sdir/ca-chain.pem" or die "Can't write ca-chain.pem: $!\n";
+            for my $f ("$sdir/cacert.pem", "$pki_dir/ca.crt") {
+                open my $in, '<', $f or die "Can't read $f: $!\n";
+                print $out $_ while <$in>;
+                close $in;
+            }
+            close $out;
+        }
         chmod 0400, "$sdir/ca.key";
         # symlink for convenience
         symlink('../pki.pl', "$sdir/pki.pl") unless -e "$sdir/pki.pl";
