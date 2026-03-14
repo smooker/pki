@@ -219,7 +219,7 @@ sub gen_client {
     }
     print "=== Generating client: $client ===\n";
     run("openssl genrsa -out $prefix.key $key_size");
-    run("openssl req -new -key $prefix.key -out $prefix.csr -batch -subj '/CN=$client'");
+    run("openssl req -config /dev/null -new -key $prefix.key -out $prefix.csr -batch -subj '/CN=$client'");
     _write_ext("$prefix.ext", "nsCertType=client\nextendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n");
     run("openssl x509 -req -in $prefix.csr -CA $subca_dir/cacert.pem -CAkey $subca_dir/ca.key -CAcreateserial -out $prefix.crt -days $days_cert -extfile $prefix.ext");
     unlink("$prefix.ext");
@@ -236,7 +236,7 @@ if ($cmd eq 'init') {
     unless (-f "$pki_dir/ca.key") {
         print "=== Generating Root CA ===\n";
         run("openssl genrsa -out $pki_dir/ca.key $ca_key_size");
-        run("openssl req -new -x509 -key $pki_dir/ca.key -out $pki_dir/ca.crt -days $days_ca -batch -subj '/CN=Root CA'");
+        run("openssl req -config /dev/null -new -x509 -key $pki_dir/ca.key -out $pki_dir/ca.crt -days $days_ca -batch -subj '/CN=Root CA'");
         chmod 0400, "$pki_dir/ca.key";
         print "\n=== Root CA created ===\n";
         print "Root CA: $pki_dir/ca.crt\n";
@@ -256,7 +256,7 @@ if ($cmd eq 'init') {
     unless (-f "$sdir/ca.key") {
         print "=== Generating Sub-CA ($name) ===\n";
         run("openssl genrsa -out $sdir/ca.key $key_size");
-        run("openssl req -new -key $sdir/ca.key -out $sdir/ca.csr -batch -subj '/CN=$name CA'");
+        run("openssl req -config /dev/null -new -key $sdir/ca.key -out $sdir/ca.csr -batch -subj '/CN=$name CA'");
 
         open my $fh, '>', "$sdir/ca.ext" or die;
         print $fh "basicConstraints=CA:TRUE,pathlen:0\nkeyUsage=keyCertSign,cRLSign\n";
@@ -286,7 +286,7 @@ if ($cmd eq 'init') {
     unless (-f "$subca_dir/server.key") {
         print "=== Generating server cert ($cn) ===\n";
         run("openssl genrsa -out $subca_dir/server.key $key_size");
-        run("openssl req -new -key $subca_dir/server.key -out $subca_dir/server.csr -batch -subj '/CN=$cn'");
+        run("openssl req -config /dev/null -new -key $subca_dir/server.key -out $subca_dir/server.csr -batch -subj '/CN=$cn'");
         _write_ext("$subca_dir/server.ext", "nsCertType=server\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n");
         run("openssl x509 -req -in $subca_dir/server.csr -CA $subca_dir/cacert.pem -CAkey $subca_dir/ca.key -CAcreateserial -out $subca_dir/server.crt -days $days_cert -extfile $subca_dir/server.ext");
         unlink("$subca_dir/server.ext");
