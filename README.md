@@ -20,6 +20,7 @@ pki.pl status
 Options:
   --subca <name>    select Sub-CA (default: vpn)
   --remote <ip>     server IP/hostname for .ovpn (default: 127.0.0.1)
+  --port <port>     server port for .ovpn (default: 1194)
 ```
 
 ## Description

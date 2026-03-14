@@ -30,6 +30,8 @@ while (@ARGV && $ARGV[0] =~ /^--/) {
         $subca_name = shift @ARGV || die "--subca requires a name\n";
     } elsif ($opt eq '--remote') {
         $server_ip = shift @ARGV || die "--remote requires IP or hostname\n";
+    } elsif ($opt eq '--port') {
+        $server_port = shift @ARGV || die "--port requires a number\n";
     } else {
         die "Unknown option: $opt\n";
     }
@@ -195,6 +197,7 @@ Usage:
   Options:
     --subca <name>                   — select Sub-CA (default: vpn)
     --remote <ip>                    — server IP/hostname for .ovpn (default: 127.0.0.1)
+    --port <port>                    — server port for .ovpn (default: 1194)
 EOF
     exit 1;
 }
@@ -666,6 +669,7 @@ pki.pl — PKI Manager (pure openssl, no easy-rsa)
     Options:
       --subca <name>    select Sub-CA (default: vpn)
       --remote <ip>     server IP/hostname for .ovpn (default: 127.0.0.1)
+      --port <port>     server port for .ovpn (default: 1194)
 
 =head1 DESCRIPTION
 
