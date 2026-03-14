@@ -9,6 +9,7 @@ pki.pl server [CN]
 pki.pl add <name> [name..]
 pki.pl conf <name> [name..]
 pki.pl p12 <name> [name..]
+pki.pl card <name> [name..]
 pki.pl dh
 pki.pl takey
 pki.pl list
@@ -68,6 +69,13 @@ ca-chain, cert, key and tls-auth. Ready to copy to client.
 Generate PKCS12 bundles (`.p12`) containing client cert, key and
 ca-chain. Empty passphrase by default. For Windows/macOS/mobile clients.
 
+### card *name* [*name* ...]
+
+Generate compact binary blob (48 bytes) for Mifare 4K smart cards.
+Contains SHA-256 of client certificate (32 bytes) + client name (16 bytes,
+null-padded). Intended for sector 2+ of Mifare 4K. Reader verifies
+hash against PKI database.
+
 ### dh
 
 Generate Diffie-Hellman parameters.
@@ -117,6 +125,7 @@ $RealBin/
       <name>.crt, <name>.key              Client certificate + key
       <name>.ovpn                         All-in-one OpenVPN config
       <name>.p12                          PKCS12 bundle
+      <name>.card                         Mifare card blob (48 bytes)
 ```
 
 ## Example
@@ -131,6 +140,7 @@ pki.pl dh
 pki.pl takey
 pki.pl conf client1 client2
 pki.pl p12 client3
+pki.pl card client1 client2 client3
 
 # Multiple Sub-CAs
 pki.pl subca mail

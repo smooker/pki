@@ -142,6 +142,7 @@ Usage:
   pki.pl add <name> [name..]     — add client(s)
   pki.pl conf <name> [name..]    — generate .ovpn config (all-in-one)
   pki.pl p12 <name> [name..]     — generate PKCS12 bundle (.p12)
+  pki.pl card <name> [name..]    — generate compact card blob for Mifare
   pki.pl dh                      — generate DH params
   pki.pl takey                   — generate TLS-Auth key
   pki.pl list                    — show all certificates
@@ -354,6 +355,34 @@ OVPN
         print "Generated: $out\n";
     }
 
+} elsif ($cmd eq 'card') {
+    usage() unless @ARGV;
+    check_ca();
+
+    for my $client (@ARGV) {
+        my $crt_file = "$subca_dir/clients/$client.crt";
+        die "Client $client not found (run: pki.pl add $client)\n"
+            unless -f $crt_file;
+
+        # compact blob for Mifare: 48 bytes
+        # [0..31]  SHA-256 of client cert (32 bytes)
+        # [32..47] client name, null-padded (16 bytes)
+        my $hash = `openssl x509 -in $crt_file -outform DER | openssl dgst -sha256 -binary`;
+        die "Failed to hash cert\n" unless length($hash) == 32;
+
+        my $name_field = pack("a16", $client);
+        my $blob = $hash . $name_field;
+
+        my $out = "$subca_dir/clients/$client.card";
+        open my $fh, '>', $out or die "Can't write $out: $!\n";
+        binmode $fh;
+        print $fh $blob;
+        close $fh;
+        chmod 0600, $out;
+        printf "Generated: $out (%d bytes, SHA256:%s)\n",
+            length($blob), unpack("H*", $hash);
+    }
+
 } elsif ($cmd eq 'list') {
     check_ca();
     print "=== Root CA ===\n";
@@ -460,6 +489,7 @@ pki.pl — PKI Manager (pure openssl, no easy-rsa)
     pki.pl takey
     pki.pl list
     pki.pl p12 <name> [name..]
+    pki.pl card <name> [name..]
     pki.pl revoke <name>
     pki.pl crl
     pki.pl status
@@ -515,6 +545,13 @@ ca-chain, cert, key and tls-auth. Ready to copy to client.
 Generate PKCS12 bundles (C<.p12>) containing client cert, key and
 ca-chain. Empty passphrase by default. For Windows/macOS/mobile clients.
 
+=item B<card> I<name> [I<name> ...]
+
+Generate compact binary blob (48 bytes) for Mifare 4K smart cards.
+Contains SHA-256 of client certificate (32 bytes) + client name (16 bytes,
+null-padded). Intended for sector 2+ of Mifare 4K. Reader verifies
+hash against PKI database.
+
 =item B<dh>
 
 Generate Diffie-Hellman parameters.
@@ -565,6 +602,7 @@ Short status: active/revoked client count, server, DH, ta.key presence.
           <name>.crt, <name>.key              Client certificate + key
           <name>.ovpn                         All-in-one OpenVPN config
           <name>.p12                          PKCS12 bundle
+          <name>.card                         Mifare card blob (48 bytes)
 
 =head1 EXAMPLE
 
