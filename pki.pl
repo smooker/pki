@@ -26,7 +26,8 @@ if ($> == 0 && !$ENV{PKI_NO_CHROOT}) {
     _prepare_chroot($pki_dir);
     chroot($pki_dir) or die "chroot($pki_dir): $!\n";
     chdir('/') or die "chdir(/): $!\n";
-    $pki_dir = '/';
+    $pki_dir = '';
+    $subca_dir = "$pki_dir/$subca_name";
 }
 my $subca_name = 'vpn';  # default
 
@@ -94,6 +95,33 @@ sub _prepare_chroot {
     make_path($dest_bin, "$root/usr/lib64", "$root/lib64");
 
     my @copied;
+
+    # copy /bin/sh (needed by system())
+    my $sh = '/bin/sh';
+    $sh = readlink($sh) if -l $sh;  # resolve symlink (e.g. /bin/bash, /bin/dash)
+    $sh = "/bin/$sh" unless $sh =~ m{^/};
+    make_path("$root/bin");
+    system("cp", $sh, "$root/bin/sh") == 0 or die "cp sh: $!\n";
+    push @copied, "/bin/sh";
+    # copy sh's libs too
+    for my $line (`ldd $sh 2>/dev/null`) {
+        if ($line =~ m{=>\s+(/\S+)}) {
+            my $lib = $1;
+            my $dest = "$root$lib";
+            my $dir = $dest; $dir =~ s{/[^/]+$}{};
+            make_path($dir);
+            system("cp", $lib, $dest) unless -f $dest;
+            push @copied, $lib unless grep { $_ eq $lib } @copied;
+        }
+        if ($line =~ m{^\s+(/lib\S+)}) {
+            my $lib = $1;
+            my $dest = "$root$lib";
+            my $dir = $dest; $dir =~ s{/[^/]+$}{};
+            make_path($dir);
+            system("cp", $lib, $dest) unless -f $dest;
+            push @copied, $lib unless grep { $_ eq $lib } @copied;
+        }
+    }
 
     # copy openssl binary
     system("cp", $openssl, "$dest_bin/openssl") == 0 or die "cp openssl: $!\n";
