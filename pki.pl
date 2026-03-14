@@ -19,6 +19,15 @@ use FindBin qw($RealBin);
 
 # PKI dir = wherever this script lives
 my $pki_dir   = $RealBin;
+
+# sandbox: chroot to $pki_dir if running as root
+if ($> == 0 && !$ENV{PKI_NO_CHROOT}) {
+    # copy openssl + libs into chroot before locking
+    _prepare_chroot($pki_dir);
+    chroot($pki_dir) or die "chroot($pki_dir): $!\n";
+    chdir('/') or die "chdir(/): $!\n";
+    $pki_dir = '/';
+}
 my $subca_name = 'vpn';  # default
 
 # parse --subca option before command
@@ -42,6 +51,87 @@ my $server_port = 1194;
 my @default_clients = ();
 
 # --- Helpers ---
+
+sub _md5 {
+    my $file = shift;
+    open my $fh, '-|', 'md5sum', $file or return '';
+    my $line = <$fh>;
+    close $fh;
+    return ($line =~ /^([0-9a-f]+)/) ? $1 : '';
+}
+
+sub _prepare_chroot {
+    my $root = shift;
+    my $manifest = "$root/.chroot_manifest";
+
+    # already prepared — verify checksums
+    if (-f $manifest) {
+        print "Chroot already prepared, verifying checksums...\n";
+        open my $fh, '<', $manifest or die "Can't read $manifest: $!\n";
+        my $ok = 1;
+        while (<$fh>) {
+            chomp;
+            my ($md5, $file) = split(/\s+/, $_, 2);
+            next unless $file && -f "$root$file";
+            my $actual = _md5("$root$file");
+            if ($actual ne $md5) {
+                warn "CHECKSUM MISMATCH: $file (expected $md5, got $actual)\n";
+                $ok = 0;
+            }
+        }
+        close $fh;
+        die "Chroot integrity check FAILED. Remove $manifest to rebuild.\n" unless $ok;
+        print "Checksums OK.\n";
+        return;
+    }
+
+    # first run — copy openssl + libs
+    my $openssl = `which openssl` || '/usr/bin/openssl';
+    chomp $openssl;
+    die "openssl not found\n" unless -x $openssl;
+
+    my $dest_bin = "$root/usr/bin";
+    make_path($dest_bin, "$root/usr/lib64", "$root/lib64");
+
+    my @copied;
+
+    # copy openssl binary
+    system("cp", $openssl, "$dest_bin/openssl") == 0 or die "cp openssl: $!\n";
+    push @copied, "/usr/bin/openssl";
+
+    # copy required shared libs (ldd)
+    my @ldd = `ldd $openssl 2>/dev/null`;
+    for my $line (@ldd) {
+        if ($line =~ m{=>\s+(/\S+)}) {
+            my $lib = $1;
+            my $dest = "$root$lib";
+            my $dir = $dest; $dir =~ s{/[^/]+$}{};
+            make_path($dir);
+            system("cp", $lib, $dest);
+            push @copied, $lib;
+        }
+        # ld-linux dynamic linker
+        if ($line =~ m{^\s+(/lib\S+)}) {
+            my $lib = $1;
+            my $dest = "$root$lib";
+            my $dir = $dest; $dir =~ s{/[^/]+$}{};
+            make_path($dir);
+            system("cp", $lib, $dest) unless -f $dest;
+            push @copied, $lib unless grep { $_ eq $lib } @copied;
+        }
+    }
+
+    # write manifest with md5 checksums
+    open my $fh, '>', $manifest or die "Can't write $manifest: $!\n";
+    for my $file (@copied) {
+        my $md5 = _md5("$root$file");
+        print $fh "$md5  $file\n";
+    }
+    close $fh;
+    chmod 0400, $manifest;
+
+    print "Chroot prepared: " . scalar(@copied) . " files copied, checksums in .chroot_manifest\n";
+}
 
 sub usage {
     print <<EOF;
@@ -179,7 +269,9 @@ if ($cmd eq 'init') {
     check_ca();
     unless (-f "$subca_dir/ta.key") {
         print "=== Generating TLS-Auth key ===\n";
-        run("openvpn --genkey secret $subca_dir/ta.key");
+        # openssl-based HMAC key (no openvpn dependency)
+        run("openssl rand -out $subca_dir/ta.key 256");
+        chmod 0600, "$subca_dir/ta.key";
     } else {
         print "ta.key already exists, skipping.\n";
     }
@@ -325,6 +417,11 @@ Generates and manages a PKI hierarchy using pure openssl:
 Uses C<FindBin::$RealBin> as PKI directory —
 works from any location without hardcoded paths.
 
+When running as root, automatically chroots to PKI directory
+after copying openssl binary and its shared libraries (one-time).
+Subsequent runs verify MD5 checksums from C<.chroot_manifest>.
+Set C<PKI_NO_CHROOT=1> to disable. Non-root skips chroot.
+
 =head1 COMMANDS
 
 =over 4
@@ -357,7 +454,7 @@ Generate Diffie-Hellman parameters.
 
 =item B<takey>
 
-Generate TLS-Auth HMAC key (requires openvpn).
+Generate TLS-Auth HMAC key (pure openssl, no openvpn dependency).
 
 =item B<list>
 
@@ -379,6 +476,9 @@ Short status: active/revoked client count, server, DH, ta.key presence.
 
     $RealBin/
       ca.key, ca.crt                          Root CA
+      .chroot_manifest                        MD5 checksums of copied binaries
+      usr/bin/openssl                          Copied binary (chroot only)
+      usr/lib64/, lib64/                       Copied shared libs (chroot only)
       <subca>/
         ca.key                                Sub-CA private key
         cacert.pem                            Sub-CA certificate

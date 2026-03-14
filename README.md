@@ -1,42 +1,107 @@
-# pki.pl — PKI Manager
+# pki.pl — PKI Manager (pure openssl, no easy-rsa)
 
-Pure openssl + Perl. No easy-rsa dependency.
-
-## Hierarchy
+## Synopsis
 
 ```
-$pki_dir/                              ← pki.pl lives here ($RealBin)
-  ca.key (RSA 4096, chmod 400)
-  ca.crt                               ← Root CA (20 years)
-  <subca>/                             ← Sub-CA directory
-    ca.key (RSA 2048, chmod 400)
-    cacert.pem                         ← Sub-CA cert (10 years)
-    ca-chain.pem                       ← cacert.pem + ca.crt
-    server.crt, server.key             ← server cert (10 years)
-    dh2048.pem                         ← Diffie-Hellman
-    ta.key                             ← TLS-Auth HMAC
-    pki.pl -> ../pki.pl                ← symlink to master script
-    clients/
-      <name>.crt, <name>.key           ← client cert + key
-      <name>.ovpn                      ← all-in-one config (from `conf`)
+pki.pl init
+pki.pl subca <name>
+pki.pl server [CN]
+pki.pl add <name> [name..]
+pki.pl conf <name> [name..]
+pki.pl dh
+pki.pl takey
+pki.pl list
+pki.pl revoke <name>
+pki.pl status
+
+Options:
+  --subca <name>    select Sub-CA (default: vpn)
 ```
+
+## Description
+
+Generates and manages a PKI hierarchy using pure openssl:
+
+```
+Root CA (RSA 4096, 20 years)
+  └── Sub-CA (RSA 2048, 10 years)
+        ├── Server cert
+        └── Client certs
+```
+
+Uses `FindBin::$RealBin` as PKI directory —
+works from any location without hardcoded paths.
+
+When running as root, automatically chroots to PKI directory
+after copying openssl binary and its shared libraries (one-time).
+Subsequent runs verify MD5 checksums from `.chroot_manifest`.
+Set `PKI_NO_CHROOT=1` to disable. Non-root skips chroot.
 
 ## Commands
 
-```bash
-pki.pl init                            # Root CA
-pki.pl subca <name>                    # create Sub-CA (e.g. vpn, mail, web)
-pki.pl server [CN]                     # server cert
-pki.pl add <name> [name..]             # add client(s)
-pki.pl conf <name> [name..]            # generate .ovpn all-in-one config
-pki.pl dh                              # DH parameters
-pki.pl takey                           # TLS-Auth key (requires openvpn)
-pki.pl list                            # show all certs with dates
-pki.pl revoke <name>                   # revoke client (.crt/.key → .revoked)
-pki.pl status                          # short status
+### init
 
-# Options:
-pki.pl --subca <name> <command>        # select Sub-CA (default: vpn)
+Create Root CA. Idempotent — skips if already exists.
+
+### subca *name*
+
+Create a Sub-CA signed by Root CA. Creates symlink to `../pki.pl`
+in the sub-CA directory for convenience.
+
+### server [*CN*]
+
+Generate server certificate signed by current Sub-CA.
+
+### add *name* [*name* ...]
+
+Add client certificates signed by current Sub-CA.
+
+### conf *name* [*name* ...]
+
+Generate all-in-one `.ovpn` configs with embedded
+ca-chain, cert, key and tls-auth. Ready to copy to client.
+
+### dh
+
+Generate Diffie-Hellman parameters.
+
+### takey
+
+Generate TLS-Auth HMAC key (pure openssl, no openvpn dependency).
+
+### list
+
+Show all certificates (Root CA, Sub-CA, Server, Clients)
+with CN, notBefore and notAfter dates.
+
+### revoke *name*
+
+Revoke client certificate — renames `.crt`/`.key` to `.revoked`,
+deletes `.ovpn` if exists.
+
+### status
+
+Short status: active/revoked client count, server, DH, ta.key presence.
+
+## File Layout
+
+```
+$RealBin/
+  ca.key, ca.crt                          Root CA
+  .chroot_manifest                        MD5 checksums of copied binaries
+  usr/bin/openssl                          Copied binary (chroot only)
+  usr/lib64/, lib64/                       Copied shared libs (chroot only)
+  <subca>/
+    ca.key                                Sub-CA private key
+    cacert.pem                            Sub-CA certificate
+    ca-chain.pem                          cacert.pem + ca.crt
+    server.crt, server.key                Server certificate
+    dh2048.pem                            Diffie-Hellman parameters
+    ta.key                                TLS-Auth HMAC key
+    pki.pl -> ../pki.pl                   Symlink to master script
+    clients/
+      <name>.crt, <name>.key              Client certificate + key
+      <name>.ovpn                         All-in-one OpenVPN config
 ```
 
 ## Example
@@ -62,19 +127,14 @@ pki.pl status
 pki.pl revoke client2
 ```
 
-## Features
-
-- **Portable**: uses `FindBin::$RealBin` — no hardcoded paths
-- **Idempotent**: safe to re-run, skips existing files
-- **Sub-CA isolation**: each Sub-CA in its own directory with own `cacert.pem`
-- **All-in-one configs**: `conf` embeds ca-chain, cert, key, tls-auth into single `.ovpn`
-- **Symlinks**: Sub-CA dirs get `pki.pl → ../pki.pl` for convenience
-
 ## Requirements
 
 - Perl 5 (core modules only: `FindBin`, `File::Path`)
 - openssl
-- openvpn (only for `takey` command)
+
+## Author
+
+smooker <sc@smooker.org>
 
 ## License
 
