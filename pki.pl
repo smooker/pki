@@ -19,22 +19,20 @@ use FindBin qw($RealBin);
 
 # PKI dir = wherever this script lives
 my $pki_dir   = $RealBin;
-
-# sandbox: chroot to $pki_dir if running as root
-if ($> == 0 && !$ENV{PKI_NO_CHROOT}) {
-    # copy openssl + libs into chroot before locking
-    _prepare_chroot($pki_dir);
-    chroot($pki_dir) or die "chroot($pki_dir): $!\n";
-    chdir('/') or die "chdir(/): $!\n";
-    $pki_dir = '';
-    $subca_dir = "$pki_dir/$subca_name";
-}
 my $subca_name = 'vpn';  # default
 
 # parse --subca option before command
 if (@ARGV && $ARGV[0] eq '--subca') {
     shift @ARGV;
     $subca_name = shift @ARGV || die "--subca requires a name\n";
+}
+
+# sandbox: chroot to $pki_dir if running as root
+if ($> == 0 && !$ENV{PKI_NO_CHROOT}) {
+    _prepare_chroot($pki_dir);
+    chroot($pki_dir) or die "chroot($pki_dir): $!\n";
+    chdir('/') or die "chdir(/): $!\n";
+    $pki_dir = '';
 }
 
 my $subca_dir = "$pki_dir/$subca_name";
