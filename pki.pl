@@ -22,6 +22,8 @@ my $pki_dir   = $RealBin;
 my $subca_name = 'vpn';  # default
 my $server_ip = '127.0.0.1';
 my $server_port = 1194;
+my $p12_pin = '';
+my $extra_subj = '';  # extra Subject fields: /O=.../OU=.../L=.../C=...
 
 # parse options before command
 while (@ARGV && $ARGV[0] =~ /^--/) {
@@ -32,6 +34,10 @@ while (@ARGV && $ARGV[0] =~ /^--/) {
         $server_ip = shift @ARGV || die "--remote requires IP or hostname\n";
     } elsif ($opt eq '--port') {
         $server_port = shift @ARGV || die "--port requires a number\n";
+    } elsif ($opt eq '--pin') {
+        $p12_pin = shift @ARGV // die "--pin requires a value\n";
+    } elsif ($opt eq '--subj') {
+        $extra_subj = shift @ARGV || die "--subj requires value (e.g. '/O=Org/OU=Unit/L=City/C=BG')\n";
     } else {
         die "Unknown option: $opt\n";
     }
@@ -230,9 +236,11 @@ sub check_ca {
         unless -f "$pki_dir/ca.crt" && -f "$subca_dir/cacert.pem";
 }
 
+my $domain = 'smooker.org';
+
 sub _fqcn {
     my $name = shift;
-    $name = "$name.$subca_name" unless $name =~ /\.\Q$subca_name\E$/;
+    $name = "$name.$subca_name.$domain" unless $name =~ /\.\Q$domain\E$/;
     return $name;
 }
 
@@ -245,7 +253,8 @@ sub gen_client {
     }
     print "=== Generating client: $client ===\n";
     run("openssl genrsa -out $prefix.key $key_size");
-    run("openssl req -config $pki_dir/.openssl.cnf -new -key $prefix.key -out $prefix.csr -batch -subj '/CN=$client'");
+    my $subj = "/CN=$client" . $extra_subj;
+    run("openssl req -config $pki_dir/.openssl.cnf -new -key $prefix.key -out $prefix.csr -batch -subj '$subj'");
     _write_ext("$prefix.ext", "nsCertType=client\nextendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n");
     run("openssl x509 -req -in $prefix.csr -CA $subca_dir/cacert.pem -CAkey $subca_dir/ca.key -CAcreateserial -out $prefix.crt -days $days_cert -extfile $prefix.ext");
     unlink("$prefix.ext");
@@ -262,7 +271,7 @@ if ($cmd eq 'init') {
     unless (-f "$pki_dir/ca.key" && -f "$pki_dir/ca.crt") {
         print "=== Generating Root CA ===\n";
         run("openssl genrsa -out $pki_dir/ca.key $ca_key_size");
-        run("openssl req -config $pki_dir/.openssl.cnf -new -x509 -key $pki_dir/ca.key -out $pki_dir/ca.crt -days $days_ca -batch -subj '/CN=Root CA' -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=keyCertSign,cRLSign'");
+        run("openssl req -config $pki_dir/.openssl.cnf -new -x509 -key $pki_dir/ca.key -out $pki_dir/ca.crt -days $days_ca -batch -subj '/CN=$domain Root CA' -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=keyCertSign,cRLSign'");
         chmod 0400, "$pki_dir/ca.key";
         print "\n=== Root CA created ===\n";
         print "Root CA: $pki_dir/ca.crt\n";
@@ -282,7 +291,7 @@ if ($cmd eq 'init') {
     unless (-f "$sdir/ca.key" && -f "$sdir/cacert.pem") {
         print "=== Generating Sub-CA ($name) ===\n";
         run("openssl genrsa -out $sdir/ca.key $key_size");
-        run("openssl req -config $pki_dir/.openssl.cnf -new -key $sdir/ca.key -out $sdir/ca.csr -batch -subj '/CN=$name CA'");
+        run("openssl req -config $pki_dir/.openssl.cnf -new -key $sdir/ca.key -out $sdir/ca.csr -batch -subj '/CN=$name.$domain CA'");
 
         open my $fh, '>', "$sdir/ca.ext" or die;
         print $fh "basicConstraints=CA:TRUE,pathlen:0\nkeyUsage=keyCertSign,cRLSign\n";
@@ -508,9 +517,14 @@ CONF
 
         my $out = "$subca_dir/clients/$client.p12";
         print "=== Generating PKCS12: $client ===\n";
-        run("openssl pkcs12 -export -in $crt_file -inkey $key_file -certfile $subca_dir/ca-chain.pem -out $out -passout pass:");
+        run("openssl pkcs12 -export -in $crt_file -inkey $key_file -out $out -passout pass:$p12_pin -name $client");
         chmod 0600, $out;
-        print "Generated: $out\n";
+        print "Generated: $out" . ($p12_pin ? " (PIN protected)" : " (no PIN)") . "\n";
+
+        # Generate .p12.pub — cleartext cert info for card sectors 36-39
+        my $pub_out = "$out.pub";
+        run("openssl x509 -in $crt_file -noout -subject -issuer -serial -dates -fingerprint -sha256 > $pub_out");
+        print "Public info: $pub_out\n";
     }
 
 } elsif ($cmd eq 'card') {

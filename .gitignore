@@ -1,0 +1,13 @@
+# Private keys — NEVER commit
+*.key
+*.pem
+*.p12
+*.pfx
+*.der
+*.srl
+ca.crt
+
+# Generated dirs
+*/clients/
+*/ca-chain.pem
+*/cacert.*
